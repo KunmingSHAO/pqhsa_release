@@ -26,8 +26,8 @@ benchmarks/
   e2e_pq_param_sweep.py        HF-transformers integration of the operator (batched-heads,
                                CUDA-graph decode path) used by the quality harness and by vLLM
   eval_task_utility.py         quality harness: RULER-style synthetic tasks, InfiniteBench, LongBench
-  baselines_*.py               harness re-implementations of Quest, SnapKV, RetrievalAttention,
-                               STS and ParisKV used for comparisons
+  baselines_*.py               harness re-implementations of Quest, SnapKV, RetrievalAttention
+                               and ParisKV used for comparisons
   run_ablation_arm.py          background-ablation variants (A, B, C, C2, C2b, T, Bx, D, dense)
   stats/paired_bootstrap_ci.py paired differences with task-stratified bootstrap 95% CIs
   speed/decode_speed.py        decode speed inside vLLM 0.8.5 (attention-segment and wall-clock clocks)
@@ -131,7 +131,7 @@ scripts/eval_pqhsa.sh 0 ruler 0.01 results/quality/ruler_pqhsa_p1 \
 ```
 
 The same wrapper runs `--suite infinitebench` (six tasks at 128K by default, `--infinitebench-tasks`, `--infinitebench-samples`) and `--suite longbench` (`--tasks`, `--max-input-tokens`).
-Passing `--method dense` evaluates full attention; `--method quest|snapkv|retrieval_attention|sts|pariskv|sink_local` evaluates the harness baselines, whose exact-token budget is set with `--token-budget` or derived from a retrieval fraction with `--quest-budget-p` / `--pariskv-budget-p` (see `--help`). Each run writes one jsonl row per prompt (`suite`, `task`, `_id`, `score`, generation) and a json summary.
+Passing `--method dense` evaluates full attention; `--method quest|snapkv|retrieval_attention|pariskv|sink_local` evaluates the harness baselines, whose exact-token budget is set with `--token-budget` or derived from a retrieval fraction with `--quest-budget-p` / `--pariskv-budget-p` (see `--help`). Each run writes one jsonl row per prompt (`suite`, `task`, `_id`, `score`, generation) and a json summary.
 
 Background ablation and paired confidence intervals (same selector, only the treatment of unselected tokens differs):
 

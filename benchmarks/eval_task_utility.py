@@ -24,7 +24,6 @@ import e2e_pq_param_sweep as e2e
 import baselines_snapkv as snapkv
 import baselines_quest_calibrated as quest_cal
 import baselines_retrieval_attention as ra
-import baselines_sts as sts
 import baselines_pariskv as pariskv
 
 
@@ -704,11 +703,6 @@ def run_one_sample(
     args._last_scan_stats = {}
     if method == "retrieval_attention":
         return _run_retrieval_attention_sample(model, tokenizer, args, input_ids, gen_steps)
-    if method == "sts":
-        draft_model = getattr(args, "_sts_draft_model", None)
-        if draft_model is not None:
-            return _run_sts_real_sample(model, draft_model, tokenizer, args, input_ids, gen_steps)
-        return _run_sts_sample(model, tokenizer, args, input_ids, gen_steps)
     cache = e2e._run_prefill(model, input_ids, chunk_size=args.prefill_chunk_size)
     try:
         if method == "dense":
@@ -870,90 +864,6 @@ def _run_retrieval_attention_sample(
         ra.restore_retrieval_attention_patch(patched)
         if cache is not None:
             del cache
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-
-def _run_sts_sample(
-    model: Any,
-    tokenizer: Any,
-    args: argparse.Namespace,
-    input_ids: torch.Tensor,
-    gen_steps: int,
-) -> str:
-    """Prefill under the STS patch (captures calibration queries at the proxy
-    draft layer and every target layer), build the offline head map, then
-    decode (draft layer dense each step; target layers exact top-k, no bg)."""
-    patched = sts.install_sts_patch(
-        model,
-        token_budget=int(args.token_budget),
-        prompt_len=int(input_ids.shape[1]),
-        draft_layer=int(args.sts_draft_layer),
-        calib_tokens=int(args.sts_calib_tokens),
-        calib_topk=int(args.sts_calib_topk),
-    )
-    cache = None
-    try:
-        cache = e2e._run_prefill(model, input_ids, chunk_size=args.prefill_chunk_size)
-        head_map_stats = sts.build_head_maps(patched, cache)
-        args._last_sts_head_map_stats = head_map_stats
-        return _generate(model, tokenizer, input_ids, cache, gen_steps)
-    finally:
-        sts.restore_sts_patch(patched)
-        if cache is not None:
-            del cache
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-
-
-def _run_sts_real_sample(
-    model: Any,
-    draft_model: Any,
-    tokenizer: Any,
-    args: argparse.Namespace,
-    input_ids: torch.Tensor,
-    gen_steps: int,
-) -> str:
-    """Real draft: separate Llama-3.2-1B-Instruct model + its own KV
-    cache alongside the target. Prefill both on the identical input_ids,
-    build the offline (target-layer -> mapped-draft-layer) head map, then
-    decode with the draft's full forward completing before the target's each
-    step (see baselines_sts.generate_with_real_draft)."""
-    handle = sts.install_sts_real(
-        model,
-        draft_model,
-        token_budget=int(args.token_budget),
-        prompt_len=int(input_ids.shape[1]),
-        calib_tokens=int(args.sts_calib_tokens),
-        calib_topk=int(args.sts_calib_topk),
-    )
-    cache = None
-    draft_cache = None
-    try:
-        cache = e2e._run_prefill(model, input_ids, chunk_size=args.prefill_chunk_size)
-        draft_input_ids = input_ids.to(e2e._model_input_device(draft_model, fallback=input_ids.device))
-        draft_cache = e2e._run_prefill(draft_model, draft_input_ids, chunk_size=args.prefill_chunk_size)
-        head_map_stats = sts.build_head_maps_real(handle, cache, draft_cache)
-        args._last_sts_head_map_stats = head_map_stats
-        text, gen_stats = sts.generate_with_real_draft(
-            model,
-            draft_model,
-            tokenizer,
-            input_ids,
-            cache,
-            draft_cache,
-            context_tokens=int(input_ids.shape[1]),
-            gen_steps=gen_steps,
-            shared=handle["shared"],
-        )
-        args._last_sts_gen_stats = gen_stats
-        return _strip_think_blocks(text)
-    finally:
-        sts.restore_sts_real(handle)
-        if cache is not None:
-            del cache
-        if draft_cache is not None:
-            del draft_cache
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
@@ -1481,16 +1391,9 @@ def run_ruler(model: Any, tokenizer: Any, args: argparse.Namespace) -> dict[str,
             }
             if args.method in {
                 "quest", "quest_channel", "quest_calibrated", "snapkv", "snapkv_channel",
-                "sts", "pariskv",
+                "pariskv",
             }:
                 rec["token_budget"] = int(args.token_budget)
-            if args.method == "sts":
-                if getattr(args, "sts_budget_p", None) is not None:
-                    rec["budget_p"] = float(args.sts_budget_p)
-                rec["sts_head_map_stats"] = getattr(args, "_last_sts_head_map_stats", None)
-                rec["sts_draft_real"] = bool(getattr(args, "_sts_draft_model", None) is not None)
-                if getattr(args, "_sts_draft_model", None) is not None:
-                    rec["sts_gen_stats"] = getattr(args, "_last_sts_gen_stats", None)
             if args.method == "pariskv":
                 if getattr(args, "pariskv_budget_p", None) is not None:
                     rec["budget_p"] = float(args.pariskv_budget_p)
@@ -1888,7 +1791,6 @@ def parse_extra() -> tuple[argparse.Namespace, list[str]]:
             "snapkv",
             "snapkv_channel",
             "retrieval_attention",
-            "sts",
             "pariskv",
         ),
     )
@@ -1980,32 +1882,6 @@ def parse_extra() -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument("--ra-nprobe", type=int, default=ra.RA_NPROBE)
     parser.add_argument("--ra-nprobe-q", type=int, default=ra.RA_NPROBE_Q)
     parser.add_argument(
-        "--sts-budget-p",
-        type=float,
-        default=None,
-        help="Optional grid fraction p used to derive STS-harness token-budget; recorded in json.",
-    )
-    parser.add_argument(
-        "--sts-draft-layer",
-        type=int,
-        default=sts.STS_DRAFT_LAYER,
-        help="Proxy draft layer index (used when --sts-draft-model is not given).",
-    )
-    parser.add_argument("--sts-calib-tokens", type=int, default=sts.STS_CALIB_TOKENS)
-    parser.add_argument("--sts-calib-topk", type=int, default=sts.STS_CALIB_TOPK)
-    parser.add_argument(
-        "--sts-draft-model",
-        default=None,
-        help=(
-            "Path or HF id of a real Llama-3.2-1B-Instruct checkpoint. When set, "
-            "--method sts loads it as a second model + its own KV cache and uses "
-            "baselines_sts.install_sts_real (real cross-model draft, every target "
-            "layer sparsifiable) instead of the proxy draft (a single shallow layer "
-            "of the target itself, --sts-draft-layer). Default unset keeps the "
-            "proxy path."
-        ),
-    )
-    parser.add_argument(
         "--pariskv-budget-p",
         type=float,
         default=None,
@@ -2072,11 +1948,6 @@ def main() -> None:
     args.ra_nlist = extra.ra_nlist
     args.ra_nprobe = extra.ra_nprobe
     args.ra_nprobe_q = extra.ra_nprobe_q
-    args.sts_budget_p = extra.sts_budget_p
-    args.sts_draft_layer = extra.sts_draft_layer
-    args.sts_calib_tokens = extra.sts_calib_tokens
-    args.sts_calib_topk = extra.sts_calib_topk
-    args.sts_draft_model = extra.sts_draft_model
     args.pariskv_budget_p = extra.pariskv_budget_p
     args.pariskv_subspaces = extra.pariskv_subspaces
     args.pariskv_rho = extra.pariskv_rho
@@ -2111,12 +1982,6 @@ def main() -> None:
             raise ValueError(
                 f"retrieval_attention token_budget {args.token_budget} < min feasible {min_budget}"
             )
-    if args.method == "sts":
-        min_budget = sts.min_feasible_budget()
-        if args.token_budget < min_budget:
-            raise ValueError(
-                f"sts token_budget {args.token_budget} < min feasible {min_budget}"
-            )
     if args.method == "pariskv":
         pariskv_sink = int(str(args.sink).split(",")[0])
         pariskv_local = int(str(args.local_window).split(",")[0])
@@ -2137,21 +2002,6 @@ def main() -> None:
         "device_map": "auto" if args.device_map == "auto" else {"": 0},
     }
     model = e2e.AutoModelForCausalLM.from_pretrained(args.model, **model_kwargs).eval()
-    args._sts_draft_model = None
-    if args.method == "sts" and args.sts_draft_model:
-        draft_tokenizer = e2e.AutoTokenizer.from_pretrained(
-            args.sts_draft_model, local_files_only=args.local_files_only
-        )
-        if int(draft_tokenizer.vocab_size) != int(tokenizer.vocab_size):
-            raise ValueError(
-                "sts real draft requires a same-family tokenizer: target vocab_size="
-                f"{tokenizer.vocab_size} draft vocab_size={draft_tokenizer.vocab_size}"
-            )
-        draft_kwargs = dict(model_kwargs)
-        draft_model = e2e.AutoModelForCausalLM.from_pretrained(
-            args.sts_draft_model, **draft_kwargs
-        ).eval()
-        args._sts_draft_model = draft_model
     thinking = _thinking_chat_enabled(tokenizer)
     print(
         json.dumps(
@@ -2235,28 +2085,6 @@ def main() -> None:
                 nprobe_q=int(args.ra_nprobe_q),
             )
         )
-    if args.method == "sts" and args._sts_draft_model is not None:
-        report.update(
-            sts.report_metadata_real(
-                token_budget=int(args.token_budget),
-                budget_p=args.sts_budget_p,
-                draft_model_path=str(args.sts_draft_model),
-                n_draft_layers=int(args._sts_draft_model.config.num_hidden_layers),
-                n_target_layers=int(model.config.num_hidden_layers),
-                calib_tokens=int(args.sts_calib_tokens),
-                calib_topk=int(args.sts_calib_topk),
-            )
-        )
-    elif args.method == "sts":
-        report.update(
-            sts.report_metadata(
-                token_budget=int(args.token_budget),
-                budget_p=args.sts_budget_p,
-                draft_layer=int(args.sts_draft_layer),
-                calib_tokens=int(args.sts_calib_tokens),
-                calib_topk=int(args.sts_calib_topk),
-            )
-        )
     if args.method == "pariskv":
         report.update(
             pariskv.report_metadata(
@@ -2276,10 +2104,6 @@ def main() -> None:
         report["ruler"] = run_ruler(model, tokenizer, args)
     if args.suite == "infinitebench":
         report["infinitebench"] = run_infinitebench(model, tokenizer, args)
-    if args.method == "sts" and getattr(args, "_last_sts_head_map_stats", None):
-        report["sts_head_map_stats_last_sample"] = args._last_sts_head_map_stats
-    if args.method == "sts" and getattr(args, "_last_sts_gen_stats", None):
-        report["sts_gen_stats_last_sample"] = args._last_sts_gen_stats
     if args.method == "pariskv" and getattr(args, "_last_pariskv_stats", None):
         report["pariskv_stats_last_sample"] = args._last_pariskv_stats
     print(json.dumps({"event": "done", **report}, sort_keys=True), flush=True)

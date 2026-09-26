@@ -4,8 +4,8 @@ The official ParisKV repository has no Llama adapter (Qwen-only release) and
 ships no RULER/niah driver, so an official-stack apples-to-apples run is
 infeasible. This file is a **quality-only harness reproduction**: it reproduces the paper's *selection* logic (which
 tokens get exact attention) inside this repo's own HF eval loop — the same
-pattern already used for Quest/SnapKV/STS (`baselines_snapkv.py`,
-`baselines_sts.py`) — without the paper's CUDA kernels, UVA/CPU-offload, or
+pattern already used for Quest/SnapKV (`eval_task_utility.py`,
+`baselines_snapkv.py`) — without the paper's CUDA kernels, UVA/CPU-offload, or
 decode-time incremental buffer update (none of those change *which tokens are
 selected*, only how fast the selection runs).
 
@@ -32,7 +32,7 @@ Paper recipe (Sec. 4, Appendix B of the ParisKV paper):
   5. Exact attention (Eq. 3) is restricted to sink + local + the Stage-II
      top-k — a pure *selector*, no background/residual compensation term
      (unlike PQ-HSA's PQ-score background) — matches the "truncation" family
-     (Quest/SnapKV/STS) structurally, differing only in the selector.
+     (Quest/SnapKV) structurally, differing only in the selector.
 
 DEVIATIONS from the paper (stated explicitly, quality-only reproduction):
   * **Rotation**: SRHT (SubsampledRandomizedHadamardTransform, an O(D log D)
@@ -86,11 +86,11 @@ DEVIATIONS from the paper (stated explicitly, quality-only reproduction):
     *which* tokens are fetched, never to compute the attention itself).
   * **Budget conversion**: the paper's budget is a fixed absolute
     `final_topk` (default 100), not a percentage.
-    for apples-to-apples comparison with PQ-HSA/Quest/SnapKV/STS on the same
+    for apples-to-apples comparison with PQ-HSA/Quest/SnapKV on the same
     x-axis, `final_topk = token_budget - sink - local_window` where
     `token_budget` comes from the shared aligned-budget formula
     (`aligned_token_budget` below, identical formula to
-    `baselines_sts.py`/`baselines_snapkv.py`).
+    `baselines_snapkv.py`).
 """
 from __future__ import annotations
 
@@ -129,7 +129,7 @@ _QUANT_CACHE: dict[int, tuple[torch.Tensor, torch.Tensor]] = {}
 
 
 def aligned_token_budget(p: float, length: int, sink: int = 4, local: int = 128) -> int:
-    """Aligned-budget grid formula (same as baselines_sts.py / baselines_snapkv.py).
+    """Aligned-budget grid formula (same as baselines_snapkv.py).
     The result is the *total* exact-attention
     budget; final_topk = token_budget - sink - local (see install_pariskv_patch)."""
     inner = sink + local + math.ceil(p * max(0, length - sink - local))
@@ -362,7 +362,7 @@ def pariskv_attention(
     rotation_seed: int = PARISKV_ROTATION_SEED,
 ) -> tuple[torch.Tensor, dict[str, Any]]:
     """Sink + Stage-I/II-selected + local exact attention, no background term
-    (Eq. 3, restricted softmax — same truncation family as Quest/SnapKV/STS)."""
+    (Eq. 3, restricted softmax — same truncation family as Quest/SnapKV)."""
     bsz, h, q_len, d = query_states.shape
     if bsz != 1 or q_len != 1:
         raise ValueError("pariskv_attention: harness assumes bsz=1, q_len=1 decode step")
@@ -413,7 +413,7 @@ def pariskv_attention(
     return context, stats
 
 
-# ---- model patch (mirrors baselines_sts.py / eval_task_utility.py's quest) --
+# ---- model patch (mirrors baselines_snapkv.py / eval_task_utility.py's quest)
 
 def _pariskv_llama_forward(
     self,

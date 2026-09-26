@@ -8,7 +8,7 @@
 #            --ruler-tasks niah_multiquery,niah_multivalue,cwe,fwe,qa --ruler-samples 50 --ruler-tokens 131072
 #
 # Replace "--method pqhsa" by passing `--method dense` (full attention) or a baseline
-# (quest, snapkv, retrieval_attention, sts, pariskv, sink_local) as an extra argument;
+# (quest, snapkv, retrieval_attention, pariskv, sink_local) as an extra argument;
 # the last --method on the command line wins.
 #
 # Environment overrides: MODEL (default meta-llama/Llama-3.1-8B-Instruct), PY (default python).
