@@ -1,0 +1,4 @@
+Metadata-Version: 2.1
+Name: pq_hsa_vllm_plugin
+Version: 0.0.1
+Summary: Repo-local vLLM general plugin that installs PQ-HSA on each TP worker.

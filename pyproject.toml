@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pq-hsa"
+version = "0.1.0"
+description = "PQ-HSA: decode-time hybrid sparse/approximate attention over an IVF-PQ index of the KV cache."
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+dependencies = [
+  "torch>=2.6",
+  "numpy",
+]
+
+[project.optional-dependencies]
+triton = ["triton>=3.2"]
+eval = [
+  "transformers>=5.0",
+  "datasets",
+  "rouge",
+  "fuzzywuzzy",
+  "python-Levenshtein",
+]
+test = ["pytest>=7"]
+
+[tool.setuptools.packages.find]
+include = ["pq_hsa*"]
+
+[tool.setuptools.package-data]
+"pq_hsa.kernels.cuda" = ["*.cu"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "-q"

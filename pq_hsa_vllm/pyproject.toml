@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pq-hsa-vllm"
+version = "0.1.0"
+description = "vLLM general plugin that installs the PQ-HSA decode attention backend (vLLM 0.8.5.post1 and 0.29.0)."
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+dependencies = [
+  "torch>=2.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7",
+]
+
+# Auto-loaded by vllm.plugins.load_general_plugins() once per process
+# (driver, and every TP worker subprocess -- see plugin.py docstring) unless
+# VLLM_PLUGINS restricts the set. The function itself is a no-op unless
+# PQ_HSA_VLLM=1 is set (tests/test_plugin.py covers this).
+[project.entry-points."vllm.general_plugins"]
+pq_hsa_vllm = "pq_hsa_vllm.plugin:vllm_general_plugin"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["pq_hsa_vllm*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

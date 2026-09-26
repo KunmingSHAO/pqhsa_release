@@ -1,0 +1,2 @@
+[vllm.general_plugins]
+pq_hsa_worker = benchmarks.vllm_backend.worker_hook:vllm_general_plugin

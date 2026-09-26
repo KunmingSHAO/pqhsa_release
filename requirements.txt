@@ -1,0 +1,19 @@
+# Core operator and HF-transformers evaluation harness (tested versions).
+# PyTorch built for CUDA 12.4, e.g.:
+#   pip install torch==2.6.0 --index-url https://download.pytorch.org/whl/cu124
+torch==2.6.0
+triton==3.2.0
+numpy>=2.2
+transformers==5.15.1
+datasets==5.0.1
+rouge==1.0.1
+fuzzywuzzy==0.18.0
+python-Levenshtein>=0.25
+pytest>=7
+
+# vLLM integration: install ONE of the following into a separate environment,
+# then `pip install -e ./pq_hsa_vllm` into that same environment.
+#   vllm==0.8.5.post1   (torch 2.6.0+cu124; FlashAttention backend)
+#   vllm==0.29.0        (torch 2.13.0+cu130; needs a CUDA 13 toolchain for the JIT kernels)
+#
+# Optional: flash-kmeans (batched index build; PQ_HSA_BATCHED_BUILD=1 PQ_HSA_FLASH_KMEANS=1, default OFF).
