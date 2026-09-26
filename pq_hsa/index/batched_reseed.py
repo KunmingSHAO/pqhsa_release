@@ -1,8 +1,9 @@
-"""Opt-in fix for the batched (all-heads-at-once) index build.
+"""Empty-cluster re-seeding for the batched (all-heads-at-once) index build.
 
-Gate: ``PQ_HSA_BATCHED_RESEED=1`` together with ``PQ_HSA_BATCHED_BUILD=1``.
-With PQ_HSA_BATCHED_RESEED unset nothing in this module runs and
-``batched_build.train_codebooks_batched`` behaves exactly as before.
+Runs by default whenever ``PQ_HSA_BATCHED_BUILD=1``;
+``PQ_HSA_BATCHED_RESEED=0`` falls back to the plain batched k-means of
+``batched_build._kmeans_batched``. The default per-head build
+(``PQ_HSA_BATCHED_BUILD`` unset) never calls this module.
 
 What it changes relative to ``batched_build._kmeans_batched``:
 
@@ -62,7 +63,7 @@ _ANNOUNCED = False
 
 
 def batched_reseed_enabled() -> bool:
-    return os.environ.get("PQ_HSA_BATCHED_RESEED", "0") == "1"
+    return os.environ.get("PQ_HSA_BATCHED_RESEED", "1") != "0"
 
 
 def seeded_init_indices(

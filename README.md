@@ -69,7 +69,7 @@ pip install -e ./pq_hsa_vllm
 
 The plugin is an editable install: at import time it puts the repository root on `sys.path` so that `pq_hsa` and `benchmarks.vllm_backend` are importable (override with `PQ_HSA_REPO_ROOT`).
 
-Optional: the batched index build (`PQ_HSA_BATCHED_BUILD=1 PQ_HSA_FLASH_KMEANS=1 PQ_HSA_BATCHED_RESEED=1`) trains all heads of a layer in one flash-kmeans call and requires the `flash_kmeans` package. `PQ_HSA_BATCHED_RESEED=1` computes key norms in FP32 and re-seeds empty clusters with the per-head rule, so the batched build assigns keys to the same lists as the per-head build. It is off by default; the default build is the per-head torch k-means.
+Optional: the batched index build (`PQ_HSA_BATCHED_BUILD=1 PQ_HSA_FLASH_KMEANS=1 PQ_HSA_BATCHED_RESEED=1`) trains all heads of a layer in one flash-kmeans call and requires the `flash_kmeans` package. The batched build computes key norms in FP32 and re-seeds empty clusters with the per-head rule, so it assigns keys to the same lists as the per-head build; this is on by default whenever the batched build is used (`PQ_HSA_BATCHED_RESEED=0` turns it off). The batched build itself is off by default; the default build is the per-head torch k-means.
 
 ## Enabling the vLLM plugin
 

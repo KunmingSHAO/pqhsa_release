@@ -94,9 +94,10 @@ def train_codebooks_batched(
     (projection, coarse k-means, residual, per-subspace PQ k-means), but with
     all heads / subspaces batched into two Flash-KMeans calls.
     """
-    if os.environ.get("PQ_HSA_BATCHED_RESEED", "0") == "1":
-        # Opt-in: per-element empty-cluster re-seeding with the kmeans_l2 rule and
-        # fp32 ||x||^2 for the assignment kernel. Unset -> the code below, unchanged.
+    if os.environ.get("PQ_HSA_BATCHED_RESEED", "1") != "0":
+        # Default: per-element empty-cluster re-seeding with the kmeans_l2 rule and
+        # fp32 ||x||^2 for the assignment kernel. PQ_HSA_BATCHED_RESEED=0 -> the
+        # plain batched k-means below.
         from pq_hsa.index.batched_reseed import train_codebooks_batched_reseed
 
         return train_codebooks_batched_reseed(keys, config, return_assignments=return_assignments)
